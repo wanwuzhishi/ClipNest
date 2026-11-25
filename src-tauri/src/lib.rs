@@ -1,5 +1,6 @@
 mod clipboard;
 mod commands;
+mod keyhook;
 mod paste;
 mod settings;
 mod store;
@@ -21,18 +22,95 @@ pub struct AppState {
 }
 
 /// 显示/隐藏主面板
+
+
+/// 用 Win32 判断面板是否真的可见（Tauri 内部状态和我们 SetWindowPos 显示不同步）
+pub fn panel_visible(w: &tauri::WebviewWindow) -> bool {
+    if let Ok(h) = w.hwnd() {
+        unsafe {
+            windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(
+                windows::Win32::Foundation::HWND(h.0 as _),
+            )
+            .as_bool()
+        }
+    } else {
+        false
+    }
+}
+
+
+/// 同步隐藏面板（Tauri 的 hide 是异步的，会让热键切换状态错乱）
+pub fn hide_panel_now(w: &tauri::WebviewWindow) {
+    if let Ok(h) = w.hwnd() {
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                windows::Win32::Foundation::HWND(h.0 as _),
+                windows::Win32::UI::WindowsAndMessaging::SW_HIDE,
+            );
+        }
+    }
+}
+
+/// 面板是否真的拿到了前台焦点
+pub fn panel_is_active() -> bool {
+    unsafe {
+        let fg = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
+        if fg.0.is_null() {
+            return false;
+        }
+        let mut pid: u32 = 0;
+        windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(fg, Some(&mut pid));
+        pid == std::process::id()
+    }
+}
+
+/// 是否让窗口拒绝被激活（不抢焦点）
+pub fn set_no_activate(w: &tauri::WebviewWindow, on: bool) {
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE};
+    const WS_EX_NOACTIVATE: isize = 0x0800_0000;
+    if let Ok(h) = w.hwnd() {
+        let hw = windows::Win32::Foundation::HWND(h.0 as _);
+        unsafe {
+            let ex = GetWindowLongPtrW(hw, GWL_EXSTYLE);
+            let next = if on {
+                ex | WS_EX_NOACTIVATE
+            } else {
+                ex & !WS_EX_NOACTIVATE
+            };
+            SetWindowLongPtrW(hw, GWL_EXSTYLE, next);
+        }
+    }
+}
+
+/// 需要输入搜索时，显式把面板变成可激活并抢回焦点
+pub fn activate_panel(app: &AppHandle) {
+    let Some(w) = app.get_webview_window("panel") else {
+        return;
+    };
+    keyhook::reset();
+    set_no_activate(&w, false);
+    if let Ok(h) = w.hwnd() {
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(
+                windows::Win32::Foundation::HWND(h.0 as _),
+            );
+        }
+    }
+    let _ = w.set_focus();
+}
+
 pub fn toggle_panel(app: &AppHandle) {
     let Some(w) = app.get_webview_window("panel") else {
         return;
     };
-    if w.is_visible().unwrap_or(false) {
-        let _ = w.hide();
+    if panel_visible(&w) {
+        hide_panel_now(&w);
         return;
     }
     paste::capture_foreground();
-    let _ = w.show();
+    keyhook::reset();
+    set_no_activate(&w, true);
     position_near_cursor(&w);
-    let _ = w.set_focus();
     let _ = app.emit("panel-shown", ());
 }
 
@@ -152,6 +230,37 @@ pub fn run() {
                 }
             });
 
+            // 面板默认不抢焦点；键盘导航走全局低级钩子
+            if let Some(panel) = app.get_webview_window("panel") {
+                set_no_activate(&panel, true);
+            }
+            let hook_app = handle.clone();
+            keyhook::install(move |vk| {
+                let Some(w) = hook_app.get_webview_window("panel") else {
+                    return false;
+                };
+                if !panel_visible(&w) || panel_is_active() {
+                    return false;
+                }
+                let shift = key_down(0x10);
+                let ctrl = key_down(0x11);
+                let action = match vk {
+                    0x1B => "esc".to_string(),
+                    0x26 => "up".to_string(),
+                    0x28 => "down".to_string(),
+                    0x0D => "enter".to_string(),
+                    0x2E => "delete".to_string(),
+                    0x50 if ctrl => "pin".to_string(),
+                    0x31..=0x39 => format!("num:{}", vk - 0x30),
+                    _ => return false,
+                };
+                let _ = hook_app.emit(
+                    "panel-key",
+                    serde_json::json!({ "action": action, "shift": shift }),
+                );
+                true
+            });
+
             build_tray(&handle)?;
             if let Err(e) = register_hotkey(&handle, &cfg.hotkey) {
                 eprintln!("[clipnest] 热键注册失败: {e}");
@@ -191,10 +300,18 @@ pub fn run() {
             commands::close_settings,
             commands::prune_now,
             commands::image_url,
+            commands::activate_panel,
             commands::quit_app,
         ])
         .run(tauri::generate_context!())
         .expect("ClipNest 启动失败");
+}
+
+
+fn key_down(vk: i32) -> bool {
+    unsafe {
+        (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000) != 0
+    }
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {

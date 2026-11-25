@@ -202,6 +202,33 @@ export default function Panel() {
     return () => window.removeEventListener("keydown", onKey);
   }, [items, sel, query, doPaste, doDelete, toggleFlag]);
 
+  // 面板未抢焦点时，键盘操作由 Rust 侧低级钩子转发过来
+  useEffect(() => {
+    const un = listen<{ action: string; shift: boolean }>("panel-key", (e) => {
+      const { action, shift } = e.payload;
+      const cur = items[sel];
+      if (action === "esc") {
+        api.hidePanel();
+      } else if (action === "up") {
+        setSel((s) => Math.max(0, s - 1));
+      } else if (action === "down") {
+        setSel((s) => Math.min(s + 1, Math.max(0, items.length - 1)));
+      } else if (action === "enter") {
+        if (cur) doPaste(cur, shift);
+      } else if (action === "delete") {
+        if (cur) doDelete(cur);
+      } else if (action === "pin") {
+        if (cur) toggleFlag(cur, "pinned");
+      } else if (action.startsWith("num:")) {
+        const it = items[Number(action.slice(4)) - 1];
+        if (it) doPaste(it, false);
+      }
+    });
+    return () => {
+      un.then((f) => f()).catch(() => {});
+    };
+  }, [items, sel, doPaste, doDelete, toggleFlag]);
+
   const current = items[sel];
   const counts = useMemo(() => {
     let text = 0;
@@ -233,6 +260,7 @@ export default function Panel() {
               placeholder="搜索剪贴板历史…"
               spellCheck={false}
               autoComplete="off"
+              onMouseDown={() => api.activatePanel()}
             />
           </div>
           <div className="topbar-meta no-drag">

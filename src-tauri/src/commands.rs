@@ -45,7 +45,7 @@ pub fn paste_item(app: AppHandle, state: State<'_, AppState>, id: i64, plain: bo
     let hide = { state.settings.lock().unwrap().paste_hide };
     if hide {
         if let Some(w) = app.get_webview_window("panel") {
-            let _ = w.hide();
+            crate::hide_panel_now(&w);
         }
     }
     paste::paste_to_previous(plain);
@@ -140,7 +140,7 @@ pub fn set_paused(app: AppHandle, state: State<'_, AppState>, paused: bool) -> R
 #[tauri::command]
 pub fn hide_panel(app: AppHandle) {
     if let Some(w) = app.get_webview_window("panel") {
-        let _ = w.hide();
+        crate::hide_panel_now(&w);
     }
 }
 
@@ -171,6 +171,12 @@ pub fn prune_now(state: State<'_, AppState>) -> R<usize> {
 #[tauri::command]
 pub fn image_url(path: String) -> R<String> {
     Ok(path)
+}
+
+
+#[tauri::command]
+pub fn activate_panel(app: AppHandle) {
+    crate::activate_panel(&app);
 }
 
 #[tauri::command]

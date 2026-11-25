@@ -1,34 +1,58 @@
-//! 记录前台窗口并把内容“粘”回目标应用
+//! 记录前台窗口与焦点控件，粘贴时把它们还原
 #![cfg(windows)]
 
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::time::Duration;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-    VIRTUAL_KEY,
+    SendInput, SetFocus, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+    KEYEVENTF_KEYUP, VIRTUAL_KEY,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, GUITHREADINFO,
+    SetForegroundWindow,
+};
+use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 
 static LAST_FG: AtomicIsize = AtomicIsize::new(0);
+static LAST_FOCUS: AtomicIsize = AtomicIsize::new(0);
 
 const VK_CONTROL: u16 = 0x11;
 const VK_V: u16 = 0x56;
 const VK_SHIFT: u16 = 0x10;
 
-/// 弹出面板前调用，记住当时的前台窗口
-pub fn capture_foreground() {
-    let h = unsafe { GetForegroundWindow() };
-    LAST_FG.store(h.0 as isize, Ordering::SeqCst);
-}
-
-pub fn last_foreground() -> Option<HWND> {
-    let v = LAST_FG.load(Ordering::SeqCst);
+fn as_hwnd(v: isize) -> Option<HWND> {
     if v == 0 {
         None
     } else {
         Some(HWND(v as *mut std::ffi::c_void))
     }
+}
+
+/// 弹出面板前调用：记住前台窗口，以及它内部真正有焦点的控件
+pub fn capture_foreground() {
+    unsafe {
+        let fg = GetForegroundWindow();
+        LAST_FG.store(fg.0 as isize, Ordering::SeqCst);
+        let tid = GetWindowThreadProcessId(fg, None);
+        let mut gi = GUITHREADINFO {
+            cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+            ..Default::default()
+        };
+        if GetGUIThreadInfo(tid, &mut gi).is_ok() && !gi.hwndFocus.0.is_null() {
+            LAST_FOCUS.store(gi.hwndFocus.0 as isize, Ordering::SeqCst);
+        } else {
+            LAST_FOCUS.store(0, Ordering::SeqCst);
+        }
+    }
+}
+
+fn last_foreground() -> Option<HWND> {
+    as_hwnd(LAST_FG.load(Ordering::SeqCst))
+}
+
+fn last_focus() -> Option<HWND> {
+    as_hwnd(LAST_FOCUS.load(Ordering::SeqCst))
 }
 
 fn key_event(vk: u16, up: bool) -> INPUT {
@@ -50,9 +74,14 @@ fn key_event(vk: u16, up: bool) -> INPUT {
     }
 }
 
-/// 发送 Ctrl+V（或 Ctrl+Shift+V 走纯文本粘贴）
+/// 发送 Ctrl+V（plain 时用 Ctrl+Shift+V 走纯文本粘贴）
 pub fn send_paste(plain: bool) {
-    let mut seq = vec![key_event(VK_CONTROL, false)];
+    // 热键触发后 Alt 有时会残留按下状态，先把所有修饰键弹起来
+    let mut seq: Vec<INPUT> = [0x12u16, 0x11, 0x10, 0x5B, 0x5C]
+        .iter()
+        .map(|&vk| key_event(vk, true))
+        .collect();
+    seq.push(key_event(VK_CONTROL, false));
     if plain {
         seq.push(key_event(VK_SHIFT, false));
     }
@@ -62,20 +91,34 @@ pub fn send_paste(plain: bool) {
         seq.push(key_event(VK_SHIFT, true));
     }
     seq.push(key_event(VK_CONTROL, true));
-    unsafe {
-        SendInput(&seq, std::mem::size_of::<INPUT>() as i32);
-    }
+    let _ = unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
 }
 
-/// 回到之前的窗口并粘贴；面板需要先隐藏
+
+/// 还原目标窗口和控件焦点后粘贴
 pub fn paste_to_previous(plain: bool) {
-    std::thread::spawn(move || {
-        if let Some(h) = last_foreground() {
-            unsafe {
-                let _ = SetForegroundWindow(h);
+    std::thread::spawn(move || unsafe {
+        let target = last_foreground();
+        let focus = last_focus();
+        if let Some(h) = target {
+            let tid = GetWindowThreadProcessId(h, None);
+            let cur = GetCurrentThreadId();
+            // 把输入队列接到目标线程，注入的按键才会直接进目标窗口
+            let attached = AttachThreadInput(cur, tid, true);
+            let _ = SetForegroundWindow(h);
+            if let Some(f) = focus {
+                if f != h {
+                    let _ = SetFocus(f);
+                }
             }
+            std::thread::sleep(Duration::from_millis(130));
+            send_paste(plain);
+            std::thread::sleep(Duration::from_millis(40));
+            if attached.as_bool() {
+                let _ = AttachThreadInput(cur, tid, false);
+            }
+        } else {
+            send_paste(plain);
         }
-        std::thread::sleep(Duration::from_millis(70));
-        send_paste(plain);
     });
 }

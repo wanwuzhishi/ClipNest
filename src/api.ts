@@ -22,6 +22,7 @@ export const api = {
   openSettings: () => invoke<void>("open_settings"),
   closeSettings: () => invoke<void>("close_settings"),
   pruneNow: () => invoke<number>("prune_now"),
+  activatePanel: () => invoke<void>("activate_panel"),
   quit: () => invoke<void>("quit_app"),
 };
 
