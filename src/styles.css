@@ -186,6 +186,27 @@ button {
   color: #a9c1ff;
 }
 
+.tab-toggle {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--fg-faint);
+  transition: background 0.12s, color 0.12s;
+}
+
+.tab-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+}
+
+.tab-toggle.on {
+  background: rgba(91, 140, 255, 0.16);
+  color: #a9c1ff;
+}
+
 .tab .count {
   margin-left: 5px;
   opacity: 0.7;
@@ -200,10 +221,14 @@ button {
 }
 
 .list {
-  width: 56%;
+  width: 100%;
   min-width: 300px;
   overflow-y: auto;
   padding: 6px;
+}
+
+.body.with-preview .list {
+  width: 56%;
   border-right: 1px solid var(--line);
 }
 
@@ -369,6 +394,25 @@ button {
   white-space: pre-wrap;
   word-break: break-word;
   user-select: text;
+}
+
+.preview-edit {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  border-radius: 10px;
+  border: 1px solid rgba(91, 140, 255, 0.45);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--fg);
+  user-select: text;
+}
+
+.preview-edit:focus {
+  border-color: rgba(91, 140, 255, 0.8);
 }
 
 .preview-body.mono {

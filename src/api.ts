@@ -26,6 +26,7 @@ export const api = {
   setPanelPinned: (pinned: boolean) => invoke<void>("set_panel_pinned", { pinned }),
   getPanelPinned: () => invoke<boolean>("get_panel_pinned"),
   quit: () => invoke<void>("quit_app"),
+  logDebug: (msg: string) => invoke<void>("log_debug", { msg }),
 };
 
 export function fileUrl(path: string | null | undefined): string {

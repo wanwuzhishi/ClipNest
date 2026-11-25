@@ -6,6 +6,7 @@ import {
   IconEmpty,
   IconFiles,
   IconImage,
+  IconPanel,
   IconPin,
   IconSearch,
   IconSettings,
@@ -55,10 +56,14 @@ export default function Panel() {
   const [paused, setPaused] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [clickPaste, setClickPaste] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<number | null>(null);
+  const editRef = useRef<HTMLTextAreaElement>(null);
   const lastPaste = useRef(0);
 
   const showToast = useCallback((msg: string) => {
@@ -116,6 +121,18 @@ export default function Panel() {
       un.forEach((p) => p.then((f) => f()).catch(() => {}));
     };
   }, [query, filter, refresh]);
+
+  // 切换条目时退出编辑
+  useEffect(() => {
+    setEditing(false);
+  }, [sel]);
+
+  // 进入编辑后把光标放进编辑框（面板这时才被激活）
+  useEffect(() => {
+    if (!editing) return;
+    const t = window.setTimeout(() => editRef.current?.focus(), 140);
+    return () => window.clearTimeout(t);
+  }, [editing]);
 
   // 选中项滚动到可视区
   useEffect(() => {
@@ -182,6 +199,10 @@ export default function Panel() {
         api.hidePanel();
         return;
       }
+      // 编辑框里除了 Esc，其余按键都交给输入控件
+      if (target instanceof HTMLTextAreaElement) {
+        return;
+      }
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setSel((s) => Math.min(s + 1, Math.max(0, items.length - 1)));
@@ -192,7 +213,7 @@ export default function Panel() {
         setSel((s) => Math.max(s - 1, 0));
         return;
       }
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !(target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
         if (current) doPaste(current, e.shiftKey);
         return;
@@ -322,9 +343,16 @@ export default function Panel() {
               <span className="count">{counts[f.key]}</span>
             </button>
           ))}
+          <button
+            className={`tab-toggle ${showPreview ? "on" : ""}`}
+            title={showPreview ? "收起预览" : "展开预览"}
+            onClick={() => setShowPreview((v) => !v)}
+          >
+            <IconPanel />
+          </button>
         </div>
 
-        <div className="body">
+        <div className={`body ${showPreview ? "with-preview" : ""}`}>
           <div className="list" ref={listRef}>
             {items.length === 0 && (
               <div className="empty">
@@ -396,56 +424,111 @@ export default function Panel() {
             ))}
           </div>
 
-          <div className="preview">
-            {current ? (
-              <>
-                <div className="preview-head">
-                  <div className="preview-title">
-                    {kindLabel(current.kind)} · {humanSize(current.size)} · {current.copies} 次复制
-                  </div>
-                  <div className="preview-actions">
-                    <button className="mini-btn" onClick={() => toggleFlag(current, "pinned")}>
-                      {current.pinned ? "取消置顶" : "置顶"}
-                    </button>
-                    <button className="mini-btn" onClick={() => toggleFlag(current, "favorite")}>
-                      {current.favorite ? "取消收藏" : "收藏"}
-                    </button>
-                    <button className="mini-btn" onClick={() => doCopy(current, true)}>
-                      纯文本
-                    </button>
-                    <button className="mini-btn primary" onClick={() => doPaste(current, false)}>
-                      粘贴
-                    </button>
-                  </div>
-                </div>
-                <div className={`preview-body ${current.kind === "text" ? "" : ""}`}>
-                  {current.kind === "image" && current.imagePath ? (
-                    <img src={fileUrl(current.imagePath)} alt="预览" />
-                  ) : current.kind === "files" && current.files ? (
-                    <div className="file-list">
-                      {current.files.map((p) => (
-                        <div className="file-row" key={p}>
-                          <IconFiles />
-                          <span className="path" title={p}>
-                            {p}
-                          </span>
-                        </div>
-                      ))}
+          {showPreview && (
+            <div className="preview">
+              {current ? (
+                editing ? (
+                  <>
+                    <div className="preview-head">
+                      <div className="preview-title">编辑文本</div>
+                      <div className="preview-actions">
+                        <button className="mini-btn" onClick={() => setEditing(false)}>
+                          取消
+                        </button>
+                        <button
+                          className="mini-btn primary"
+                          onClick={async () => {
+                            try {
+                              await api.updateText(current.id, draft);
+                              setEditing(false);
+                              await refresh(query, filter);
+                              showToast("已保存");
+                            } catch (e) {
+                              showToast(`保存失败：${e}`);
+                            }
+                          }}
+                        >
+                          保存
+                        </button>
+                      </div>
                     </div>
-                  ) : (
-                    (current.text ?? current.preview).slice(0, 6000)
-                  )}
+                    <textarea
+                      ref={editRef}
+                      className="preview-edit"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      spellCheck={false}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.stopPropagation();
+                          setEditing(false);
+                        }
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div className="preview-head">
+                      <div className="preview-title">
+                        {kindLabel(current.kind)} · {humanSize(current.size)} · {current.copies} 次复制
+                      </div>
+                      <div className="preview-actions">
+                        <button className="mini-btn" onClick={() => toggleFlag(current, "pinned")}>
+                          {current.pinned ? "取消置顶" : "置顶"}
+                        </button>
+                        <button className="mini-btn" onClick={() => toggleFlag(current, "favorite")}>
+                          {current.favorite ? "取消收藏" : "收藏"}
+                        </button>
+                        {current.kind === "text" && (
+                          <button
+                            className="mini-btn"
+                            onClick={() => {
+                              api.activatePanel();
+                              setDraft(current.text ?? current.preview);
+                              setEditing(true);
+                            }}
+                          >
+                            编辑
+                          </button>
+                        )}
+                        <button className="mini-btn" onClick={() => doCopy(current, true)}>
+                          纯文本
+                        </button>
+                        <button className="mini-btn primary" onClick={() => doPaste(current, false)}>
+                          粘贴
+                        </button>
+                      </div>
+                    </div>
+                    <div className="preview-body">
+                      {current.kind === "image" && current.imagePath ? (
+                        <img src={fileUrl(current.imagePath)} alt="预览" />
+                      ) : current.kind === "files" && current.files ? (
+                        <div className="file-list">
+                          {current.files.map((p) => (
+                            <div className="file-row" key={p}>
+                              <IconFiles />
+                              <span className="path" title={p}>
+                                {p}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        (current.text ?? current.preview).slice(0, 6000)
+                      )}
+                    </div>
+                  </>
+                )
+              ) : (
+                <div className="empty">
+                  <div className="empty-icon">
+                    <IconEmpty />
+                  </div>
+                  <div>选中一条记录查看详情</div>
                 </div>
-              </>
-            ) : (
-              <div className="empty">
-                <div className="empty-icon">
-                  <IconEmpty />
-                </div>
-                <div>选中一条记录查看详情</div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="footer">

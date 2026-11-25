@@ -205,6 +205,11 @@ pub fn activate_panel(app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn log_debug(msg: String) {
+    eprintln!("[ui] {msg}");
+}
+
+#[tauri::command]
 pub fn quit_app(app: AppHandle) {
     app.exit(0);
 }

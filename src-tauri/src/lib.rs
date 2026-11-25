@@ -361,6 +361,7 @@ pub fn run() {
             commands::activate_panel,
             commands::set_panel_pinned,
             commands::get_panel_pinned,
+            commands::log_debug,
             commands::quit_app,
         ])
         .run(tauri::generate_context!())

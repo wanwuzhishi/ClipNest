@@ -68,3 +68,12 @@ export function IconEmpty() {
     </svg>
   );
 }
+
+export function IconPanel() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2.6" />
+      <path d="M15 4v16" />
+    </svg>
+  );
+}
