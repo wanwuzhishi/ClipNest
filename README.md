@@ -36,6 +36,7 @@ Windows 上的本地剪贴板管理器。常驻托盘，一个热键唤出，文
 - 开机自启（HKCU Run）
 - 保留策略：按条数 / 按天数自动清理，置顶与收藏不受影响
 - 单实例、高 DPI、深色面板
+- 圆角用 Win11 的 DWM 原生圆角（`DWMWA_WINDOW_CORNER_PREFERENCE`），带抗锯齿
 
 ## 开发
 

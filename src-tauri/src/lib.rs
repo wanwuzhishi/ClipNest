@@ -53,30 +53,67 @@ pub fn panel_visible(w: &tauri::WebviewWindow) -> bool {
 
 
 
-/// 把窗口本身裁成圆角，这样即使 WebView2 底色不透明，四角也不会露出灰边
-pub fn apply_round_region(w: &tauri::WebviewWindow) {
-    use windows::Win32::Foundation::{HWND, RECT};
-    use windows::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
-    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
 
-    if let Ok(h) = w.hwnd() {
-        let hw = HWND(h.0 as _);
+/// 把 WebView2 的底色刷成面板同色（透明在这台机器上不生效，至少别漏白）
+pub fn make_webview_transparent(w: &tauri::WebviewWindow) {
+    let _ = w.with_webview(|wv| {
+        #[cfg(windows)]
         unsafe {
-            let mut rc = RECT::default();
-            if GetWindowRect(hw, &mut rc).is_err() {
-                return;
+            use webview2_com::Microsoft::Web::WebView2::Win32::{
+                ICoreWebView2Controller2, COREWEBVIEW2_COLOR,
+            };
+            use windows_core::Interface;
+
+            let ctrl = wv.controller();
+            if let Ok(c2) = ctrl.cast::<ICoreWebView2Controller2>() {
+                let _ = c2.SetDefaultBackgroundColor(COREWEBVIEW2_COLOR {
+                    A: 255,
+                    R: 20,
+                    G: 21,
+                    B: 26,
+                });
             }
-            let cw = rc.right - rc.left;
-            let ch = rc.bottom - rc.top;
-            let scale = w.scale_factor().unwrap_or(1.0);
-            let r = (16.0 * scale * 2.0) as i32;
-            let rgn = CreateRoundRectRgn(0, 0, cw + 1, ch + 1, r, r);
-            if !rgn.is_invalid() {
-                let _ = SetWindowRgn(hw, rgn, true);
+        }
+    });
+
+    #[cfg(windows)]
+    if let Ok(h) = w.hwnd() {
+        unsafe {
+            use windows::Win32::Foundation::COLORREF;
+            use windows::Win32::UI::WindowsAndMessaging::{
+                GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE,
+                LWA_ALPHA, WS_EX_LAYERED,
+            };
+            let hw = windows::Win32::Foundation::HWND(h.0 as _);
+            let ex = GetWindowLongPtrW(hw, GWL_EXSTYLE);
+            if ex & (WS_EX_LAYERED.0 as isize) == 0 {
+                SetWindowLongPtrW(hw, GWL_EXSTYLE, ex | WS_EX_LAYERED.0 as isize);
+                let _ = SetLayeredWindowAttributes(hw, COLORREF(0), 255, LWA_ALPHA);
             }
         }
     }
 }
+
+
+/// 用 Win11 的 DWM 原生圆角（有抗锯齿），替代生硬的 SetWindowRgn 裁剪
+pub fn apply_dwm_round(w: &tauri::WebviewWindow) {
+    use windows::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWM_WINDOW_CORNER_PREFERENCE,
+    };
+    if let Ok(h) = w.hwnd() {
+        let hw = windows::Win32::Foundation::HWND(h.0 as _);
+        let pref = DWM_WINDOW_CORNER_PREFERENCE(2); // DWMWCP_ROUND
+        unsafe {
+            let _ = DwmSetWindowAttribute(
+                hw,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                &pref as *const _ as *const std::ffi::c_void,
+                std::mem::size_of::<DWM_WINDOW_CORNER_PREFERENCE>() as u32,
+            );
+        }
+    }
+}
+
 
 /// 把面板重新提到最上层（不激活、不改变位置大小）
 pub fn raise_panel(w: &tauri::WebviewWindow) {
@@ -174,7 +211,7 @@ pub fn toggle_panel(app: &AppHandle) {
     if let Ok(h) = w.hwnd() {
         PANEL_HWND.store(h.0 as isize, Ordering::SeqCst);
     }
-    apply_round_region(&w);
+    apply_dwm_round(&w);
     let _ = app.emit("panel-shown", ());
 }
 
@@ -298,8 +335,9 @@ pub fn run() {
             if let Some(panel) = app.get_webview_window("panel") {
                 set_no_activate(&panel, true);
                 // WebView2 默认底色是白的，会把窗口的透明 padding 显示成灰白边
-                let _ = panel.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
-                apply_round_region(&panel);
+                let _ = panel.set_background_color(Some(tauri::window::Color::from((20, 21, 26, 255))));
+                make_webview_transparent(&panel);
+                apply_dwm_round(&panel);
             }
             let hook_app = handle.clone();
             keyhook::install(move |vk| {

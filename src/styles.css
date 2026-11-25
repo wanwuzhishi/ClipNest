@@ -10,7 +10,7 @@
   --fg-faint: #6b7080;
   --accent: #5b8cff;
   --accent-2: #8b5cf6;
-  --radius: 16px;
+  --radius: 12px;
   font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
   font-size: 13px;
   color: var(--fg);
