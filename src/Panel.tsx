@@ -422,17 +422,27 @@ export default function Panel() {
                     )}
                   </div>
                 </div>
-                <div className="item-badges">
-                  {it.pinned && (
-                    <span className="badge pin" title="已置顶">
-                      <IconPin />
-                    </span>
-                  )}
-                  {it.favorite && (
-                    <span className="badge fav" title="已收藏">
-                      <IconStar />
-                    </span>
-                  )}
+                <div className="item-actions">
+                  <button
+                    className={`act ${it.pinned ? "on pin" : ""}`}
+                    title={it.pinned ? "取消置顶" : "置顶"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFlag(it, "pinned");
+                    }}
+                  >
+                    <IconPin />
+                  </button>
+                  <button
+                    className={`act ${it.favorite ? "on fav" : ""}`}
+                    title={it.favorite ? "取消收藏" : "收藏"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFlag(it, "favorite");
+                    }}
+                  >
+                    <IconStar />
+                  </button>
                 </div>
               </div>
             ))}
