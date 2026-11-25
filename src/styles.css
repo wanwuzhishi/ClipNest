@@ -147,6 +147,11 @@ button {
   transition: background 0.12s, color 0.12s;
 }
 
+.icon-btn.close:hover {
+  background: rgba(255, 90, 110, 0.14);
+  color: #ff8f9f;
+}
+
 .icon-btn.active {
   background: rgba(91, 140, 255, 0.18);
   color: #a9c1ff;

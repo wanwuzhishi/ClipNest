@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, fileUrl } from "./api";
 import type { ClipItem, FilterKind, Settings } from "./types";
 import {
+  IconClose,
   IconEmpty,
   IconFiles,
   IconImage,
@@ -335,6 +336,9 @@ export default function Panel() {
             </button>
             <button className="icon-btn" title="设置" onClick={() => api.openSettings()}>
               <IconSettings />
+            </button>
+            <button className="icon-btn close" title="关闭（Esc）" onClick={() => api.hidePanel()}>
+              <IconClose />
             </button>
           </div>
         </div>
