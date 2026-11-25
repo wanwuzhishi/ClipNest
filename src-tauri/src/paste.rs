@@ -100,25 +100,28 @@ pub fn paste_to_previous(plain: bool) {
     std::thread::spawn(move || unsafe {
         let target = last_foreground();
         let focus = last_focus();
+        // 大多数情况下面板从未激活，前台仍是目标窗口，直接发键即可
+        let mut wait_ms = 6u64;
         if let Some(h) = target {
-            let tid = GetWindowThreadProcessId(h, None);
-            let cur = GetCurrentThreadId();
-            // 把输入队列接到目标线程，注入的按键才会直接进目标窗口
-            let attached = AttachThreadInput(cur, tid, true);
-            let _ = SetForegroundWindow(h);
+            if GetForegroundWindow() != h {
+                let _ = SetForegroundWindow(h);
+                wait_ms = 45;
+            }
             if let Some(f) = focus {
+                // 只有真正的子控件才需要接上输入队列设焦点
                 if f != h {
+                    let tid = GetWindowThreadProcessId(h, None);
+                    let cur = GetCurrentThreadId();
+                    let _ = AttachThreadInput(cur, tid, true);
                     let _ = SetFocus(f);
+                    let _ = AttachThreadInput(cur, tid, false);
+                    wait_ms = wait_ms.max(18);
                 }
             }
-            std::thread::sleep(Duration::from_millis(130));
-            send_paste(plain);
-            std::thread::sleep(Duration::from_millis(40));
-            if attached.as_bool() {
-                let _ = AttachThreadInput(cur, tid, false);
-            }
-        } else {
-            send_paste(plain);
         }
+        if wait_ms > 0 {
+            std::thread::sleep(Duration::from_millis(wait_ms));
+        }
+        send_paste(plain);
     });
 }
