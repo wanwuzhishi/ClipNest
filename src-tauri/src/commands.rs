@@ -256,6 +256,9 @@ pub fn set_panel_width(app: AppHandle, width: i32) {
             SWP_NOACTIVATE | SWP_NOZORDER,
         );
     }
+    crate::apply_round_region(&w);
+    unsafe {
+    }
 }
 
 #[tauri::command]

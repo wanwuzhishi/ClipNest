@@ -52,6 +52,32 @@ pub fn panel_visible(w: &tauri::WebviewWindow) -> bool {
 
 
 
+
+/// 把窗口本身裁成圆角，这样即使 WebView2 底色不透明，四角也不会露出灰边
+pub fn apply_round_region(w: &tauri::WebviewWindow) {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+
+    if let Ok(h) = w.hwnd() {
+        let hw = HWND(h.0 as _);
+        unsafe {
+            let mut rc = RECT::default();
+            if GetWindowRect(hw, &mut rc).is_err() {
+                return;
+            }
+            let cw = rc.right - rc.left;
+            let ch = rc.bottom - rc.top;
+            let scale = w.scale_factor().unwrap_or(1.0);
+            let r = (16.0 * scale * 2.0) as i32;
+            let rgn = CreateRoundRectRgn(0, 0, cw + 1, ch + 1, r, r);
+            if !rgn.is_invalid() {
+                let _ = SetWindowRgn(hw, rgn, true);
+            }
+        }
+    }
+}
+
 /// 把面板重新提到最上层（不激活、不改变位置大小）
 pub fn raise_panel(w: &tauri::WebviewWindow) {
     if let Ok(h) = w.hwnd() {
@@ -148,6 +174,7 @@ pub fn toggle_panel(app: &AppHandle) {
     if let Ok(h) = w.hwnd() {
         PANEL_HWND.store(h.0 as isize, Ordering::SeqCst);
     }
+    apply_round_region(&w);
     let _ = app.emit("panel-shown", ());
 }
 
@@ -270,6 +297,9 @@ pub fn run() {
             // 面板默认不抢焦点；键盘导航走全局低级钩子
             if let Some(panel) = app.get_webview_window("panel") {
                 set_no_activate(&panel, true);
+                // WebView2 默认底色是白的，会把窗口的透明 padding 显示成灰白边
+                let _ = panel.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+                apply_round_region(&panel);
             }
             let hook_app = handle.clone();
             keyhook::install(move |vk| {
