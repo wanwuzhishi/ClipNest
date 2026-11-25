@@ -24,6 +24,7 @@ export const api = {
   pruneNow: () => invoke<number>("prune_now"),
   activatePanel: () => invoke<void>("activate_panel"),
   setPanelPinned: (pinned: boolean) => invoke<void>("set_panel_pinned", { pinned }),
+  setPanelWidth: (width: number) => invoke<void>("set_panel_width", { width }),
   getPanelPinned: () => invoke<boolean>("get_panel_pinned"),
   quit: () => invoke<void>("quit_app"),
   logDebug: (msg: string) => invoke<void>("log_debug", { msg }),

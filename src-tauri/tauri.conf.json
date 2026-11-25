@@ -16,7 +16,7 @@
         "label": "panel",
         "title": "ClipNest",
         "url": "index.html",
-        "width": 820,
+        "width": 410,
         "height": 560,
         "resizable": false,
         "decorations": false,

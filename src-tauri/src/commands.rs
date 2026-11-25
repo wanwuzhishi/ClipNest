@@ -204,6 +204,60 @@ pub fn activate_panel(app: AppHandle) {
     crate::activate_panel(&app);
 }
 
+
+/// 调整面板宽度（逻辑像素），保持左边缘并夹在当前显示器工作区内
+#[tauri::command]
+pub fn set_panel_width(app: AppHandle, width: i32) {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowRect, SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOZORDER,
+    };
+
+    let Some(w) = app.get_webview_window("panel") else {
+        return;
+    };
+    let Ok(h) = w.hwnd() else { return };
+    let hw = HWND(h.0 as _);
+    unsafe {
+        let mut rc = RECT::default();
+        if GetWindowRect(hw, &mut rc).is_err() {
+            return;
+        }
+        let scale = w.scale_factor().unwrap_or(1.0);
+        let new_w = (width as f64 * scale).round() as i32;
+        let height = rc.bottom - rc.top;
+        let mut x = rc.left;
+
+        let mon = MonitorFromWindow(hw, MONITOR_DEFAULTTONEAREST);
+        let mut mi = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if GetMonitorInfoW(mon, &mut mi).as_bool() {
+            let work = mi.rcWork;
+            if x + new_w > work.right {
+                x = work.right - new_w;
+            }
+            if x < work.left {
+                x = work.left;
+            }
+        }
+
+        let _ = SetWindowPos(
+            hw,
+            HWND_TOPMOST,
+            x,
+            rc.top,
+            new_w,
+            height,
+            SWP_NOACTIVATE | SWP_NOZORDER,
+        );
+    }
+}
+
 #[tauri::command]
 pub fn log_debug(msg: String) {
     eprintln!("[ui] {msg}");

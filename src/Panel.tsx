@@ -127,6 +127,16 @@ export default function Panel() {
     setEditing(false);
   }, [sel]);
 
+  // 展开/收起预览时把面板宽度翻倍/减半
+  const firstResize = useRef(true);
+  useEffect(() => {
+    if (firstResize.current) {
+      firstResize.current = false;
+      return;
+    }
+    api.setPanelWidth(showPreview ? 820 : 410);
+  }, [showPreview]);
+
   // 进入编辑后把光标放进编辑框（面板这时才被激活）
   useEffect(() => {
     if (!editing) return;

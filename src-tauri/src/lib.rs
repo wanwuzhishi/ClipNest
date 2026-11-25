@@ -174,7 +174,7 @@ fn position_near_cursor(w: &tauri::WebviewWindow) {
         }
         let size = w
             .outer_size()
-            .unwrap_or(tauri::PhysicalSize::new(820, 560));
+            .unwrap_or(tauri::PhysicalSize::new(410, 560));
         let (ww, wh) = (size.width as i32, size.height as i32);
         let work = mi.rcWork;
         let mut x = pt.x - ww / 2;
@@ -361,6 +361,7 @@ pub fn run() {
             commands::activate_panel,
             commands::set_panel_pinned,
             commands::get_panel_pinned,
+            commands::set_panel_width,
             commands::log_debug,
             commands::quit_app,
         ])
