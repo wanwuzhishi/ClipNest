@@ -8,6 +8,7 @@ const DEFAULT: Settings = {
   keepDays: 30,
   maxTextKb: 4096,
   pasteHide: true,
+  clickPaste: false,
   startWithWindows: false,
   theme: "dark",
   paused: false,
@@ -132,6 +133,17 @@ export default function SettingsPage() {
           <div
             className={`switch ${s.pasteHide ? "on" : ""}`}
             onClick={() => patch("pasteHide", !s.pasteHide)}
+          />
+        </div>
+
+        <div className="field">
+          <div className="field-col">
+            <label>单击条目直接粘贴</label>
+            <span className="desc">关闭时单击只选中，按回车才粘贴</span>
+          </div>
+          <div
+            className={`switch ${s.clickPaste ? "on" : ""}`}
+            onClick={() => patch("clickPaste", !s.clickPaste)}
           />
         </div>
 

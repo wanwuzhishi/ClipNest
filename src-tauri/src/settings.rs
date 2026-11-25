@@ -19,6 +19,8 @@ pub struct Settings {
     pub start_with_windows: bool,
     /// 面板主题：system / light / dark
     pub theme: String,
+    /// 单击条目直接粘贴（否则只选中，靠回车粘贴）
+    pub click_paste: bool,
     /// 暂停监听
     pub paused: bool,
 }
@@ -33,6 +35,7 @@ impl Default for Settings {
             paste_hide: true,
             start_with_windows: false,
             theme: "dark".into(),
+            click_paste: false,
             paused: false,
         }
     }

@@ -5,9 +5,9 @@ use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock};
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, GetMessageW, SetWindowsHookExW, TranslateMessage, DispatchMessageW,
-    HC_ACTION, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN,
-    WM_SYSKEYUP,
+    CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
+    HC_ACTION, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP,
+    WM_LBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
 type Handler = Box<dyn Fn(u32) -> bool + Send + Sync>;
@@ -65,4 +65,35 @@ pub fn reset() {
     if let Some(set) = swallowed().as_mut() {
         set.clear();
     }
+}
+
+type MouseHandler = Box<dyn Fn(i32, i32) + Send + Sync>;
+
+static MOUSE_HANDLER: OnceLock<MouseHandler> = OnceLock::new();
+
+unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code == HC_ACTION as i32 && wparam.0 == WM_LBUTTONDOWN as usize && lparam.0 != 0 {
+        let info = *(lparam.0 as *const windows::Win32::UI::WindowsAndMessaging::MSLLHOOKSTRUCT);
+        if let Some(h) = MOUSE_HANDLER.get() {
+            h(info.pt.x, info.pt.y);
+        }
+    }
+    CallNextHookEx(None, code, wparam, lparam)
+}
+
+/// 全局鼠标钩子：只关心左键按下的坐标（留给“点外部关闭”，暂未接线）
+#[allow(dead_code)]
+pub fn install_mouse<F>(handler: F)
+where
+    F: Fn(i32, i32) + Send + Sync + 'static,
+{
+    let _ = MOUSE_HANDLER.set(Box::new(handler));
+    std::thread::spawn(|| unsafe {
+        let _hook = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), None, 0);
+        let mut msg = MSG::default();
+        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+            let _ = TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    });
 }

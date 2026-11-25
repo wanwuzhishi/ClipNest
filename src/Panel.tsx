@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, fileUrl } from "./api";
-import type { ClipItem, FilterKind } from "./types";
+import type { ClipItem, FilterKind, Settings } from "./types";
 import {
   IconEmpty,
   IconFiles,
@@ -53,10 +53,13 @@ export default function Panel() {
   const [filter, setFilter] = useState<FilterKind>("all");
   const [sel, setSel] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [clickPaste, setClickPaste] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<number | null>(null);
+  const lastPaste = useRef(0);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -89,15 +92,25 @@ export default function Panel() {
       listen<ClipItem>("clip-added", () => refresh(query, filter)),
       listen("history-cleared", () => refresh(query, filter)),
       listen<boolean>("paused-changed", (e) => setPaused(e.payload)),
+      listen<boolean>("pinned-changed", (e) => setPinned(e.payload)),
+      listen<Settings>("settings-changed", (e) => setClickPaste(e.payload.clickPaste)),
       listen("panel-shown", () => {
         setQuery("");
         setFilter("all");
         setSel(0);
         inputRef.current?.focus();
+        api.getPanelPinned().then(setPinned).catch(() => {});
         refresh("", "all");
       }),
     ];
-    api.getSettings().then((s) => setPaused(s.paused)).catch(() => {});
+    api
+      .getSettings()
+      .then((s) => {
+        setPaused(s.paused);
+        setClickPaste(s.clickPaste);
+      })
+      .catch(() => {});
+    api.getPanelPinned().then(setPinned).catch(() => {});
     inputRef.current?.focus();
     return () => {
       un.forEach((p) => p.then((f) => f()).catch(() => {}));
@@ -112,6 +125,10 @@ export default function Panel() {
 
   const doPaste = useCallback(
     async (item: ClipItem, plain: boolean) => {
+      // 单击直接粘贴时，双击的两次 click 会重复触发，这里做节流
+      const now = Date.now();
+      if (now - lastPaste.current < 350) return;
+      lastPaste.current = now;
       try {
         await api.paste(item.id, plain);
       } catch (e) {
@@ -185,6 +202,14 @@ export default function Panel() {
         if (current) doDelete(current);
         return;
       }
+      if (!inInput && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        setPinned((p) => {
+          api.setPanelPinned(!p);
+          return !p;
+        });
+        return;
+      }
       if (!inInput && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
         e.preventDefault();
         if (current) toggleFlag(current, "pinned");
@@ -217,6 +242,11 @@ export default function Panel() {
         if (cur) doPaste(cur, shift);
       } else if (action === "delete") {
         if (cur) doDelete(cur);
+      } else if (action === "toggle-pin") {
+        setPinned((p) => {
+          api.setPanelPinned(!p);
+          return !p;
+        });
       } else if (action === "pin") {
         if (cur) toggleFlag(cur, "pinned");
       } else if (action.startsWith("num:")) {
@@ -265,6 +295,13 @@ export default function Panel() {
           </div>
           <div className="topbar-meta no-drag">
             {paused && <span style={{ color: "#ffc46b" }}>已暂停</span>}
+            <button
+              className={`icon-btn ${pinned ? "active" : ""}`}
+              title={pinned ? "取消固定（粘贴后自动关闭）" : "固定面板（粘贴后不关闭、保持置顶）"}
+              onClick={() => api.setPanelPinned(!pinned)}
+            >
+              <IconPin />
+            </button>
             <button className="icon-btn" title="设置" onClick={() => api.openSettings()}>
               <IconSettings />
             </button>
@@ -304,7 +341,11 @@ export default function Panel() {
                 data-idx={i}
                 className={`item ${i === sel ? "selected" : ""}`}
                 onMouseMove={() => setSel(i)}
-                onDoubleClick={() => doPaste(it, false)}
+                onClick={() => {
+                  setSel(i);
+                  if (clickPaste) doPaste(it, false);
+                }}
+                onDoubleClick={clickPaste ? undefined : () => doPaste(it, false)}
               >
                 <div className="item-icon">
                   {it.kind === "image" && it.imagePath ? (

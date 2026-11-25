@@ -23,6 +23,8 @@ export const api = {
   closeSettings: () => invoke<void>("close_settings"),
   pruneNow: () => invoke<number>("prune_now"),
   activatePanel: () => invoke<void>("activate_panel"),
+  setPanelPinned: (pinned: boolean) => invoke<void>("set_panel_pinned", { pinned }),
+  getPanelPinned: () => invoke<boolean>("get_panel_pinned"),
   quit: () => invoke<void>("quit_app"),
 };
 

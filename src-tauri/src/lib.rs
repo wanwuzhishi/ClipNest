@@ -14,6 +14,18 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
+/// 面板是否被钉住（钉住后粘贴不自动关闭，并保持置顶）
+pub static PANEL_PINNED: AtomicBool = AtomicBool::new(false);
+/// 面板最近一次显示的时间（避免唤出面板的那次点击立刻把它关掉）
+pub static PANEL_SHOWN_AT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+/// 面板窗口句柄，供鼠标钩子做命中判断
+pub static PANEL_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+static APP_HANDLE: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
+
+fn now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
 pub struct AppState {
     pub store: Arc<Store>,
     pub settings: Mutex<settings::Settings>,
@@ -38,6 +50,26 @@ pub fn panel_visible(w: &tauri::WebviewWindow) -> bool {
     }
 }
 
+
+
+/// 把面板重新提到最上层（不激活、不改变位置大小）
+pub fn raise_panel(w: &tauri::WebviewWindow) {
+    if let Ok(h) = w.hwnd() {
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
+                windows::Win32::Foundation::HWND(h.0 as _),
+                windows::Win32::UI::WindowsAndMessaging::HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
+                    | windows::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
+                    | windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+            );
+        }
+    }
+}
 
 /// 同步隐藏面板（Tauri 的 hide 是异步的，会让热键切换状态错乱）
 pub fn hide_panel_now(w: &tauri::WebviewWindow) {
@@ -105,12 +137,17 @@ pub fn toggle_panel(app: &AppHandle) {
     };
     if panel_visible(&w) {
         hide_panel_now(&w);
+        PANEL_PINNED.store(false, Ordering::SeqCst);
         return;
     }
     paste::capture_foreground();
     keyhook::reset();
     set_no_activate(&w, true);
     position_near_cursor(&w);
+    PANEL_SHOWN_AT.store(now_ms(), Ordering::SeqCst);
+    if let Ok(h) = w.hwnd() {
+        PANEL_HWND.store(h.0 as isize, Ordering::SeqCst);
+    }
     let _ = app.emit("panel-shown", ());
 }
 
@@ -251,6 +288,7 @@ pub fn run() {
                     0x0D => "enter".to_string(),
                     0x2E => "delete".to_string(),
                     0x50 if ctrl => "pin".to_string(),
+                    0x4C if ctrl => "toggle-pin".to_string(),
                     0x31..=0x39 => format!("num:{}", vk - 0x30),
                     _ => return false,
                 };
@@ -260,6 +298,26 @@ pub fn run() {
                 );
                 true
             });
+
+            let _ = APP_HANDLE.set(handle.clone());
+
+            // 固定模式下持续把面板提到最前（防止被其它 TOPMOST 窗口盖住）
+            {
+                let keep_app = handle.clone();
+                std::thread::spawn(move || loop {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    if !PANEL_PINNED.load(Ordering::SeqCst) {
+                        continue;
+                    }
+                    if let Some(w) = keep_app.get_webview_window("panel") {
+                        if panel_visible(&w) {
+                            raise_panel(&w);
+                        }
+                    }
+                });
+            }
+
+            // TODO: 点击面板外部关闭（等固定键确认稳定后再接）
 
             build_tray(&handle)?;
             if let Err(e) = register_hotkey(&handle, &cfg.hotkey) {
@@ -301,6 +359,8 @@ pub fn run() {
             commands::prune_now,
             commands::image_url,
             commands::activate_panel,
+            commands::set_panel_pinned,
+            commands::get_panel_pinned,
             commands::quit_app,
         ])
         .run(tauri::generate_context!())

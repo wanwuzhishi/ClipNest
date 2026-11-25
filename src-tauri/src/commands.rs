@@ -43,9 +43,15 @@ pub fn paste_item(app: AppHandle, state: State<'_, AppState>, id: i64, plain: bo
     );
 
     let hide = { state.settings.lock().unwrap().paste_hide };
-    if hide {
+    let pinned = crate::PANEL_PINNED.load(std::sync::atomic::Ordering::SeqCst);
+    if hide && !pinned {
         if let Some(w) = app.get_webview_window("panel") {
             crate::hide_panel_now(&w);
+        }
+    } else if pinned {
+        // 固定模式下粘完仍留在最前面，方便连续粘贴
+        if let Some(w) = app.get_webview_window("panel") {
+            crate::raise_panel(&w);
         }
     }
     paste::paste_to_previous(plain);
@@ -139,6 +145,8 @@ pub fn set_paused(app: AppHandle, state: State<'_, AppState>, paused: bool) -> R
 
 #[tauri::command]
 pub fn hide_panel(app: AppHandle) {
+    crate::PANEL_PINNED.store(false, std::sync::atomic::Ordering::SeqCst);
+    let _ = app.emit("pinned-changed", false);
     if let Some(w) = app.get_webview_window("panel") {
         crate::hide_panel_now(&w);
     }
@@ -173,6 +181,23 @@ pub fn image_url(path: String) -> R<String> {
     Ok(path)
 }
 
+
+
+#[tauri::command]
+pub fn set_panel_pinned(app: AppHandle, pinned: bool) {
+    crate::PANEL_PINNED.store(pinned, std::sync::atomic::Ordering::SeqCst);
+    if pinned {
+        if let Some(w) = app.get_webview_window("panel") {
+            crate::raise_panel(&w);
+        }
+    }
+    let _ = app.emit("pinned-changed", pinned);
+}
+
+#[tauri::command]
+pub fn get_panel_pinned() -> bool {
+    crate::PANEL_PINNED.load(std::sync::atomic::Ordering::SeqCst)
+}
 
 #[tauri::command]
 pub fn activate_panel(app: AppHandle) {

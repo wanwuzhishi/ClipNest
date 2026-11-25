@@ -26,6 +26,7 @@ export interface Settings {
   keepDays: number;
   maxTextKb: number;
   pasteHide: boolean;
+  clickPaste: boolean;
   startWithWindows: boolean;
   theme: string;
   paused: boolean;
