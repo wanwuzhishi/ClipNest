@@ -16,6 +16,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 /// 面板是否被钉住（钉住后粘贴不自动关闭，并保持置顶）
 pub static PANEL_PINNED: AtomicBool = AtomicBool::new(false);
+/// 面板可见性（钩子回调只读这个，避免调用 Tauri API 拖慢钩子）
+pub static PANEL_OPEN: AtomicBool = AtomicBool::new(false);
 /// 面板最近一次显示的时间（避免唤出面板的那次点击立刻把它关掉）
 pub static PANEL_SHOWN_AT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
 /// 面板窗口句柄，供鼠标钩子做命中判断
@@ -136,6 +138,7 @@ pub fn raise_panel(w: &tauri::WebviewWindow) {
 
 /// 同步隐藏面板（Tauri 的 hide 是异步的，会让热键切换状态错乱）
 pub fn hide_panel_now(w: &tauri::WebviewWindow) {
+    PANEL_OPEN.store(false, Ordering::SeqCst);
     if let Ok(h) = w.hwnd() {
         unsafe {
             let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
@@ -148,14 +151,14 @@ pub fn hide_panel_now(w: &tauri::WebviewWindow) {
 
 /// 面板是否真的拿到了前台焦点
 pub fn panel_is_active() -> bool {
+    // 不能只看进程 PID：托盘窗口、钩子窗口都属于本进程，会把「面板有焦点」误判成真
+    let raw = PANEL_HWND.load(Ordering::SeqCst);
+    if raw == 0 {
+        return false;
+    }
     unsafe {
         let fg = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
-        if fg.0.is_null() {
-            return false;
-        }
-        let mut pid: u32 = 0;
-        windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(fg, Some(&mut pid));
-        pid == std::process::id()
+        fg.0 as isize == raw
     }
 }
 
@@ -207,6 +210,7 @@ pub fn toggle_panel(app: &AppHandle) {
     keyhook::reset();
     set_no_activate(&w, true);
     position_near_cursor(&w);
+    PANEL_OPEN.store(true, Ordering::SeqCst);
     PANEL_SHOWN_AT.store(now_ms(), Ordering::SeqCst);
     if let Ok(h) = w.hwnd() {
         PANEL_HWND.store(h.0 as isize, Ordering::SeqCst);
@@ -339,31 +343,40 @@ pub fn run() {
                 make_webview_transparent(&panel);
                 apply_dwm_round(&panel);
             }
-            let hook_app = handle.clone();
+            // 钩子回调必须微秒级返回：只读原子变量 + 调 Win32，
+            // 事件通过 channel 交给转发线程（低级钩子超 300ms 会被系统静默摘掉）
+            let (tx, rx) = std::sync::mpsc::channel::<(String, bool)>();
+            let emit_app = handle.clone();
+            std::thread::spawn(move || {
+                while let Ok((action, shift)) = rx.recv() {
+                    let _ = emit_app.emit(
+                        "panel-key",
+                        serde_json::json!({ "action": action, "shift": shift }),
+                    );
+                }
+            });
+
             keyhook::install(move |vk| {
-                let Some(w) = hook_app.get_webview_window("panel") else {
-                    return false;
-                };
-                if !panel_visible(&w) || panel_is_active() {
+                if !PANEL_OPEN.load(Ordering::SeqCst) || panel_is_active() {
                     return false;
                 }
                 let shift = key_down(0x10);
                 let ctrl = key_down(0x11);
                 let action = match vk {
-                    0x1B => "esc".to_string(),
-                    0x26 => "up".to_string(),
-                    0x28 => "down".to_string(),
-                    0x0D => "enter".to_string(),
-                    0x2E => "delete".to_string(),
-                    0x50 if ctrl => "pin".to_string(),
-                    0x4C if ctrl => "toggle-pin".to_string(),
-                    0x31..=0x39 => format!("num:{}", vk - 0x30),
+                    0x1B => "esc",
+                    0x26 => "up",
+                    0x28 => "down",
+                    0x0D => "enter",
+                    0x2E => "delete",
+                    0x50 if ctrl => "pin",
+                    0x4C if ctrl => "toggle-pin",
+                    0x31..=0x39 => {
+                        let _ = tx.send((format!("num:{}", vk - 0x30), shift));
+                        return true;
+                    }
                     _ => return false,
                 };
-                let _ = hook_app.emit(
-                    "panel-key",
-                    serde_json::json!({ "action": action, "shift": shift }),
-                );
+                let _ = tx.send((action.to_string(), shift));
                 true
             });
 
