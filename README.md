@@ -2,7 +2,10 @@
 
 Windows 上的本地剪贴板管理器。常驻托盘，一个热键唤出，文本 / 图片 / 文件全都能翻回去。
 
+![ClipNest 面板](docs/screenshot.png)
+
 > 技术栈：Tauri 2 + Rust + React + SQLite（全部本地存储，不联网）
+> 协议：MIT · 单文件 exe 约 4.8 MB
 
 ## 已实现
 
