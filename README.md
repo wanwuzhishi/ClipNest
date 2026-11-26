@@ -1,4 +1,8 @@
-# ClipNest · 轻量全功能剪贴板
+# ClipNest
+
+**简体中文** | [English](README.en.md)
+
+## 轻量全功能剪贴板
 
 Windows 上的本地剪贴板管理器。常驻托盘，一个热键唤出，文本 / 图片 / 文件全都能翻回去。
 
