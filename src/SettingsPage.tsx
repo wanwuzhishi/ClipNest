@@ -9,6 +9,7 @@ const DEFAULT: Settings = {
   maxTextKb: 4096,
   pasteHide: true,
   clickPaste: false,
+  closeOnOutside: true,
   privacyFilter: true,
   excludedApps: "",
   skipSensitive: true,
@@ -136,6 +137,17 @@ export default function SettingsPage() {
           <div
             className={`switch ${s.pasteHide ? "on" : ""}`}
             onClick={() => patch("pasteHide", !s.pasteHide)}
+          />
+        </div>
+
+        <div className="field">
+          <div className="field-col">
+            <label>点击面板外自动关闭</label>
+            <span className="desc">面板未固定时生效；固定后点哪都不关</span>
+          </div>
+          <div
+            className={`switch ${s.closeOnOutside ? "on" : ""}`}
+            onClick={() => patch("closeOnOutside", !s.closeOnOutside)}
           />
         </div>
 

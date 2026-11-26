@@ -81,8 +81,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     CallNextHookEx(None, code, wparam, lparam)
 }
 
-/// 全局鼠标钩子：只关心左键按下的坐标（留给“点外部关闭”，暂未接线）
-#[allow(dead_code)]
+/// 全局鼠标钩子：只关心左键按下的坐标（点外部关闭用）
 pub fn install_mouse<F>(handler: F)
 where
     F: Fn(i32, i32) + Send + Sync + 'static,

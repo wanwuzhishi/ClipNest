@@ -26,6 +26,7 @@ A lightweight, full-featured clipboard manager for Windows. Lives in the tray, o
 - Global hotkey (`Alt+V` by default), appears next to the cursor
 - **Never steals focus** — the window is created with `WS_EX_NOACTIVATE`, so an Explorer search box or a browser address bar keeps its text and cursor
 - Keyboard works through a low-level hook, not window focus
+- Click outside to dismiss (when not pinned, configurable in settings)
 - 410 px collapsed (single column) · click the square icon to expand to 820 px with a preview pane
 - Search, type filters (all / text / image / files / favorites), inline pin & favorite buttons, native Win11 rounded corners
 - Text entries are editable in the preview pane

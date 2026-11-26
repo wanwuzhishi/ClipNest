@@ -19,6 +19,10 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 pub static PANEL_PINNED: AtomicBool = AtomicBool::new(false);
 /// 面板可见性（钩子回调只读这个，避免调用 Tauri API 拖慢钩子）
 pub static PANEL_OPEN: AtomicBool = AtomicBool::new(false);
+/// 点击面板外是否自动关闭（设置项缓存，钩子里只读原子变量）
+pub static CLOSE_ON_OUTSIDE: AtomicBool = AtomicBool::new(true);
+/// 外部点击 → 关闭请求（交给转发线程处理，钩子回调不碰 Tauri API）
+static OUTSIDE_TX: std::sync::OnceLock<std::sync::mpsc::Sender<()>> = std::sync::OnceLock::new();
 /// 面板最近一次显示的时间（避免唤出面板的那次点击立刻把它关掉）
 pub static PANEL_SHOWN_AT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
 /// 面板窗口句柄，供鼠标钩子做命中判断
@@ -436,27 +440,19 @@ pub fn run() {
                     return true;
                 }
 
-                // 刚唤出：只拦导航键，字母等一概放行
+                // 刚唤出：拦导航键和 Ctrl 组合，字母等一概放行
                 if fresh {
-                    match vk {
-                        0x1B => {
-                            let _ = tx.send(("esc".to_string(), shift));
-                            return true;
-                        }
-                        0x26 => {
-                            let _ = tx.send(("up".to_string(), shift));
-                            return true;
-                        }
-                        0x28 => {
-                            let _ = tx.send(("down".to_string(), shift));
-                            return true;
-                        }
-                        0x0D => {
-                            let _ = tx.send(("enter".to_string(), shift));
-                            return true;
-                        }
+                    let action = match vk {
+                        0x1B => "esc",
+                        0x26 => "up",
+                        0x28 => "down",
+                        0x0D => "enter",
+                        0x4C if ctrl => "toggle-pin",
+                        0x50 if ctrl => "pin",
                         _ => return false,
-                    }
+                    };
+                    let _ = tx.send((action.to_string(), shift));
+                    return true;
                 }
 
                 // 面板开着但用户显然在干别的：Esc 留给面板，其它键关掉面板并照常输入
@@ -470,6 +466,51 @@ pub fn run() {
                         let _ = tx.send(("close".to_string(), shift));
                         false
                     }
+                }
+            });
+
+            // 点击面板外部自动关闭（未固定时）
+            CLOSE_ON_OUTSIDE.store(cfg.close_on_outside, Ordering::SeqCst);
+            {
+                let (outside_tx, outside_rx) = std::sync::mpsc::channel::<()>();
+                let _ = OUTSIDE_TX.set(outside_tx);
+                std::thread::spawn(move || {
+                    while outside_rx.recv().is_ok() {
+                        if let Some(app) = APP_HANDLE.get() {
+                            if let Some(w) = app.get_webview_window("panel") {
+                                hide_panel_now(&w);
+                            }
+                        }
+                    }
+                });
+            }
+            keyhook::install_mouse(move |x, y| {
+                if !PANEL_OPEN.load(Ordering::SeqCst)
+                    || PANEL_PINNED.load(Ordering::SeqCst)
+                    || !CLOSE_ON_OUTSIDE.load(Ordering::SeqCst)
+                {
+                    return;
+                }
+                // 唤出面板的那一下点击不要立刻把自己关掉
+                if now_ms() - PANEL_SHOWN_AT.load(Ordering::SeqCst) < 350 {
+                    return;
+                }
+                let raw = PANEL_HWND.load(Ordering::SeqCst);
+                if raw == 0 {
+                    return;
+                }
+                unsafe {
+                    let hw = windows::Win32::Foundation::HWND(raw as *mut std::ffi::c_void);
+                    let mut rc = windows::Win32::Foundation::RECT::default();
+                    if windows::Win32::UI::WindowsAndMessaging::GetWindowRect(hw, &mut rc).is_err() {
+                        return;
+                    }
+                    if x >= rc.left && x < rc.right && y >= rc.top && y < rc.bottom {
+                        return;
+                    }
+                }
+                if let Some(tx) = OUTSIDE_TX.get() {
+                    let _ = tx.send(());
                 }
             });
 

@@ -125,6 +125,10 @@ pub fn save_settings(app: AppHandle, state: State<'_, AppState>, settings: Setti
         *cur = settings.clone();
         cur.save(&state.data_dir).map_err(err)?;
     }
+    crate::CLOSE_ON_OUTSIDE.store(
+        settings.close_on_outside,
+        std::sync::atomic::Ordering::SeqCst,
+    );
     let _ = crate::settings::set_autostart(settings.start_with_windows);
     crate::register_hotkey(&app, &settings.hotkey).map_err(err)?;
     let _ = app.emit("settings-changed", &settings);
