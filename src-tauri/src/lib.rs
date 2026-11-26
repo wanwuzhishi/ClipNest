@@ -75,6 +75,12 @@ pub fn make_webview_transparent(w: &tauri::WebviewWindow) {
                     B: 26,
                 });
             }
+            // 彻底关掉 WebView2 的默认右键菜单
+            if let Ok(core) = ctrl.CoreWebView2() {
+                if let Ok(settings) = core.Settings() {
+                    let _ = settings.SetAreDefaultContextMenusEnabled(false);
+                }
+            }
         }
     });
 
