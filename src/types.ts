@@ -27,6 +27,7 @@ export interface Settings {
   maxTextKb: number;
   pasteHide: boolean;
   clickPaste: boolean;
+  privacyFilter: boolean;
   excludedApps: string;
   skipSensitive: boolean;
   startWithWindows: boolean;

@@ -707,6 +707,12 @@ kbd {
   margin-bottom: -6px;
 }
 
+.field.disabled,
+.field-col.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .divider {
   height: 1px;
   background: var(--line);

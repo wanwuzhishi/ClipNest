@@ -187,7 +187,7 @@ pub fn dib_to_png(dib: &[u8]) -> Option<Vec<u8>> {
 }
 
 /// 读取当前剪贴板内容；被自己写入触发的变更会被忽略
-pub fn read_clipboard() -> Option<Payload> {
+pub fn read_clipboard(check_markers: bool) -> Option<Payload> {
     if is_suppressed() {
         return None;
     }
@@ -195,7 +195,7 @@ pub fn read_clipboard() -> Option<Payload> {
         return None;
     }
     // 密码管理器等会放这个格式，表示"别记录我"
-    if crate::privacy::has_ignore_marker() {
+    if check_markers && crate::privacy::has_ignore_marker() {
         unsafe {
             let _ = CloseClipboard();
         }

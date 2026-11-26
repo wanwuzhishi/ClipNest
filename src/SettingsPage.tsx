@@ -9,6 +9,7 @@ const DEFAULT: Settings = {
   maxTextKb: 4096,
   pasteHide: true,
   clickPaste: false,
+  privacyFilter: true,
   excludedApps: "",
   skipSensitive: true,
   startWithWindows: false,
@@ -165,6 +166,17 @@ export default function SettingsPage() {
 
         <div className="field">
           <div className="field-col">
+            <label>启用隐私排除</label>
+            <span className="desc">关闭后所有内容都会记录，包括密码和密钥</span>
+          </div>
+          <div
+            className={`switch ${s.privacyFilter ? "on" : ""}`}
+            onClick={() => patch("privacyFilter", !s.privacyFilter)}
+          />
+        </div>
+
+        <div className={`field ${s.privacyFilter ? "" : "disabled"}`}>
+          <div className="field-col">
             <label>跳过疑似密钥/卡号</label>
             <span className="desc">私钥、AWS/GitHub/Slack 令牌、JWT、信用卡号不写入历史</span>
           </div>
@@ -174,7 +186,7 @@ export default function SettingsPage() {
           />
         </div>
 
-        <div className="field-col" style={{ gap: 6 }}>
+        <div className={`field-col ${s.privacyFilter ? "" : "disabled"}`} style={{ gap: 6 }}>
           <label>不记录这些程序的复制</label>
           <span className="desc">每行一个 exe 名，不区分大小写；密码管理器默认已列出</span>
           <textarea

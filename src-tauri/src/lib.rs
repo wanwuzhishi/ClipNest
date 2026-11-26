@@ -332,11 +332,12 @@ pub fn run() {
                 }
                 // 给源程序一点时间释放剪贴板，减少 CLIPBRD_E_CANT_OPEN
                 std::thread::sleep(std::time::Duration::from_millis(35));
-                let Some(payload) = clipboard::read_clipboard() else {
+                let privacy_on = listener_settings.lock().unwrap().privacy_filter;
+                let Some(payload) = clipboard::read_clipboard(privacy_on) else {
                     return;
                 };
                 // 隐私过滤：进程名单 + 敏感内容
-                {
+                if privacy_on {
                     let cfg = listener_settings.lock().unwrap();
                     if let Some(app) = payload.source_app.as_deref() {
                         if privacy::is_excluded(app, &cfg.excluded_apps) {

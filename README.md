@@ -32,7 +32,7 @@ Windows 上的本地剪贴板管理器。常驻托盘，一个热键唤出，文
 - 回写多格式（文本 + HTML + RTF + PNG + DIB），粘到 Word / 浏览器不掉格式
 - 粘贴后隐藏面板（可配置）
 
-**隐私**
+**隐私**（设置页有总开关，默认开启）
 - 进程排除名单：密码管理器（KeePass / 1Password / Bitwarden 等默认内置）复制的内不记录
 - 敏感内容识别：私钥、AWS/GitHub/Slack 令牌、JWT、信用卡号自动跳过
 - 尊重剪贴板忽略标记（`ExcludeClipboardContentFromMonitorProcessing` / `Clipboard Viewer Ignore`）
