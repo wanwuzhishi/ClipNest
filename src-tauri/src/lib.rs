@@ -156,6 +156,27 @@ pub fn hide_panel_now(w: &tauri::WebviewWindow) {
     }
 }
 
+
+/// 鼠标是不是压在面板上（命中判断，纯 Win32，微秒级）
+pub fn cursor_in_panel() -> bool {
+    let raw = PANEL_HWND.load(Ordering::SeqCst);
+    if raw == 0 {
+        return false;
+    }
+    unsafe {
+        let mut pt = windows::Win32::Foundation::POINT::default();
+        if windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut pt).is_err() {
+            return false;
+        }
+        let hw = windows::Win32::Foundation::HWND(raw as *mut std::ffi::c_void);
+        let mut rc = windows::Win32::Foundation::RECT::default();
+        if windows::Win32::UI::WindowsAndMessaging::GetWindowRect(hw, &mut rc).is_err() {
+            return false;
+        }
+        pt.x >= rc.left && pt.x < rc.right && pt.y >= rc.top && pt.y < rc.bottom
+    }
+}
+
 /// 面板是否真的拿到了前台焦点
 pub fn panel_is_active() -> bool {
     // 不能只看进程 PID：托盘窗口、钩子窗口都属于本进程，会把「面板有焦点」误判成真
@@ -388,24 +409,68 @@ pub fn run() {
                 if !PANEL_OPEN.load(Ordering::SeqCst) || panel_is_active() {
                     return false;
                 }
+
                 let shift = key_down(0x10);
                 let ctrl = key_down(0x11);
-                let action = match vk {
-                    0x1B => "esc",
-                    0x26 => "up",
-                    0x28 => "down",
-                    0x0D => "enter",
-                    0x2E => "delete",
-                    0x50 if ctrl => "pin",
-                    0x4C if ctrl => "toggle-pin",
-                    0x31..=0x39 => {
-                        let _ = tx.send((format!("num:{}", vk - 0x30), shift));
-                        return true;
+                let hovering = cursor_in_panel();
+                // 刚唤出的 3 秒内算"用户正在操作面板"
+                let fresh = now_ms() - PANEL_SHOWN_AT.load(Ordering::SeqCst) < 3000;
+
+                // 鼠标压在面板上：完整快捷键
+                if hovering {
+                    let action = match vk {
+                        0x1B => "esc",
+                        0x26 => "up",
+                        0x28 => "down",
+                        0x0D => "enter",
+                        0x2E => "delete",
+                        0x50 if ctrl => "pin",
+                        0x4C if ctrl => "toggle-pin",
+                        0x31..=0x39 => {
+                            let _ = tx.send((format!("num:{}", vk - 0x30), shift));
+                            return true;
+                        }
+                        _ => return false,
+                    };
+                    let _ = tx.send((action.to_string(), shift));
+                    return true;
+                }
+
+                // 刚唤出：只拦导航键，字母等一概放行
+                if fresh {
+                    match vk {
+                        0x1B => {
+                            let _ = tx.send(("esc".to_string(), shift));
+                            return true;
+                        }
+                        0x26 => {
+                            let _ = tx.send(("up".to_string(), shift));
+                            return true;
+                        }
+                        0x28 => {
+                            let _ = tx.send(("down".to_string(), shift));
+                            return true;
+                        }
+                        0x0D => {
+                            let _ = tx.send(("enter".to_string(), shift));
+                            return true;
+                        }
+                        _ => return false,
                     }
-                    _ => return false,
-                };
-                let _ = tx.send((action.to_string(), shift));
-                true
+                }
+
+                // 面板开着但用户显然在干别的：Esc 留给面板，其它键关掉面板并照常输入
+                match vk {
+                    0x1B => {
+                        let _ = tx.send(("esc".to_string(), shift));
+                        true
+                    }
+                    0x10 | 0x11 | 0x12 | 0x5B | 0x5C => false,
+                    _ => {
+                        let _ = tx.send(("close".to_string(), shift));
+                        false
+                    }
+                }
             });
 
             let _ = APP_HANDLE.set(handle.clone());

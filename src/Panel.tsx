@@ -264,7 +264,9 @@ export default function Panel() {
     const un = listen<{ action: string; shift: boolean }>("panel-key", (e) => {
       const { action, shift } = e.payload;
       const cur = items[sel];
-      if (action === "esc") {
+      if (action === "close") {
+        api.hidePanel();
+      } else if (action === "esc") {
         api.hidePanel();
       } else if (action === "up") {
         setSel((s) => Math.max(0, s - 1));
