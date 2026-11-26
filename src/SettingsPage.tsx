@@ -9,6 +9,8 @@ const DEFAULT: Settings = {
   maxTextKb: 4096,
   pasteHide: true,
   clickPaste: false,
+  excludedApps: "",
+  skipSensitive: true,
   startWithWindows: false,
   theme: "dark",
   paused: false,
@@ -155,6 +157,33 @@ export default function SettingsPage() {
           <div
             className={`switch ${s.paused ? "on" : ""}`}
             onClick={() => patch("paused", !s.paused)}
+          />
+        </div>
+
+        <div className="divider" />
+        <div className="section-title">隐私</div>
+
+        <div className="field">
+          <div className="field-col">
+            <label>跳过疑似密钥/卡号</label>
+            <span className="desc">私钥、AWS/GitHub/Slack 令牌、JWT、信用卡号不写入历史</span>
+          </div>
+          <div
+            className={`switch ${s.skipSensitive ? "on" : ""}`}
+            onClick={() => patch("skipSensitive", !s.skipSensitive)}
+          />
+        </div>
+
+        <div className="field-col" style={{ gap: 6 }}>
+          <label>不记录这些程序的复制</label>
+          <span className="desc">每行一个 exe 名，不区分大小写；密码管理器默认已列出</span>
+          <textarea
+            className="settings-textarea"
+            rows={6}
+            spellCheck={false}
+            value={s.excludedApps}
+            onChange={(e) => patch("excludedApps", e.target.value)}
+            placeholder="KeePass.exe"
           />
         </div>
 

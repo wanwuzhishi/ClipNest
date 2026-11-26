@@ -21,6 +21,10 @@ pub struct Settings {
     pub theme: String,
     /// 单击条目直接粘贴（否则只选中，靠回车粘贴）
     pub click_paste: bool,
+    /// 不记录的进程名单（换行/逗号分隔）
+    pub excluded_apps: String,
+    /// 跳过看起来像密钥/令牌/卡号的文本
+    pub skip_sensitive: bool,
     /// 暂停监听
     pub paused: bool,
 }
@@ -36,6 +40,8 @@ impl Default for Settings {
             start_with_windows: false,
             theme: "dark".into(),
             click_paste: false,
+            excluded_apps: "KeePass.exe\nKeePassXC.exe\n1Password.exe\nBitwarden.exe\nLastPass.exe\nDashlane.exe\nEnpass.exe\nKeeper.exe\nNordPass.exe\nRoboForm.exe".into(),
+            skip_sensitive: true,
             paused: false,
         }
     }

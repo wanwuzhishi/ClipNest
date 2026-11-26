@@ -680,6 +680,25 @@ kbd {
   transform: translateX(17px);
 }
 
+.settings-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 84px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  user-select: text;
+}
+
+.settings-textarea:focus {
+  border-color: rgba(91, 140, 255, 0.5);
+}
+
 .section-title {
   font-size: 11px;
   color: var(--fg-faint);

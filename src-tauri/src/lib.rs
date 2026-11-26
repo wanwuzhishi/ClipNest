@@ -1,5 +1,6 @@
 mod clipboard;
 mod commands;
+mod privacy;
 mod keyhook;
 mod paste;
 mod settings;
@@ -30,7 +31,7 @@ fn now_ms() -> i64 {
 
 pub struct AppState {
     pub store: Arc<Store>,
-    pub settings: Mutex<settings::Settings>,
+    pub settings: Arc<Mutex<settings::Settings>>,
     pub data_dir: PathBuf,
     pub paused: Arc<AtomicBool>,
 }
@@ -309,10 +310,11 @@ pub fn run() {
             )?);
             let cfg = settings::Settings::load(&data_dir);
             let paused = Arc::new(AtomicBool::new(cfg.paused));
+            let settings_arc = Arc::new(Mutex::new(cfg.clone()));
 
             app.manage(AppState {
                 store: store.clone(),
-                settings: Mutex::new(cfg.clone()),
+                settings: settings_arc.clone(),
                 data_dir: data_dir.clone(),
                 paused: paused.clone(),
             });
@@ -321,6 +323,7 @@ pub fn run() {
             let listener_store = store.clone();
             let listener_app = handle.clone();
             let listener_paused = paused.clone();
+            let listener_settings = settings_arc.clone();
             let keep_count = cfg.keep_count;
             let keep_days = cfg.keep_days;
             clipboard::spawn_listener(move || {
@@ -332,6 +335,24 @@ pub fn run() {
                 let Some(payload) = clipboard::read_clipboard() else {
                     return;
                 };
+                // 隐私过滤：进程名单 + 敏感内容
+                {
+                    let cfg = listener_settings.lock().unwrap();
+                    if let Some(app) = payload.source_app.as_deref() {
+                        if privacy::is_excluded(app, &cfg.excluded_apps) {
+                            return;
+                        }
+                    }
+                    if cfg.skip_sensitive
+                        && payload
+                            .text
+                            .as_deref()
+                            .map(privacy::looks_sensitive)
+                            .unwrap_or(false)
+                    {
+                        return;
+                    }
+                }
                 match listener_store.insert(&payload) {
                     Ok(item) => {
                         let _ = listener_store.prune(keep_count, keep_days);

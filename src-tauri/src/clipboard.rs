@@ -194,6 +194,13 @@ pub fn read_clipboard() -> Option<Payload> {
     if !open(10) {
         return None;
     }
+    // 密码管理器等会放这个格式，表示"别记录我"
+    if crate::privacy::has_ignore_marker() {
+        unsafe {
+            let _ = CloseClipboard();
+        }
+        return None;
+    }
     let mut payload = Payload::default();
 
     unsafe {
@@ -254,6 +261,7 @@ pub fn read_clipboard() -> Option<Payload> {
             }
         }
     }
+    payload.source_app = crate::privacy::clipboard_owner_app();
     unsafe {
         let _ = CloseClipboard();
     }
