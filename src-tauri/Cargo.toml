@@ -44,6 +44,11 @@ windows = { version = "0.58", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 
+[features]
+# 生产构建必须带上：不加这个 feature，Tauri 会把 exe 当成 dev 模式，
+# 运行时去连 devUrl（localhost:1420）而不是加载内嵌的 dist
+custom-protocol = ["tauri/custom-protocol"]
+
 [profile.release]
 codegen-units = 1
 lto = true

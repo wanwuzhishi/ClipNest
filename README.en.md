@@ -68,8 +68,11 @@ Manual release build:
 ```bash
 npm run build                                        # frontend -> dist/
 touch src-tauri/src/main.rs                          # force re-embed
-cargo build --release --manifest-path src-tauri/Cargo.toml
+cargo build --release --features custom-protocol --manifest-path src-tauri/Cargo.toml
 ```
+
+> `--features custom-protocol` is required. Without it Tauri treats the exe as a dev build and
+> loads `devUrl` (localhost:1420) instead of the embedded assets.
 
 Output: `src-tauri/target/release/clipnest.exe`
 

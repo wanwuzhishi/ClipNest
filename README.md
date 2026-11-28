@@ -65,8 +65,11 @@ npm run app:build    # 打安装包
 
 ```bash
 npm run build                      # 前端 → dist/
-cargo build --release --manifest-path src-tauri/Cargo.toml
+cargo build --release --features custom-protocol --manifest-path src-tauri/Cargo.toml
 ```
+
+> `--features custom-protocol` 不能省。不加这个 feature，Tauri 会把 exe 当成 dev 构建，
+> 运行时去连 `devUrl`（localhost:1420），关掉 vite 就是一片 `ERR_CONNECTION_REFUSED`。
 
 产物：`src-tauri/target/release/clipnest.exe`
 
