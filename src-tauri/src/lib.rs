@@ -455,6 +455,15 @@ pub fn run() {
                     return true;
                 }
 
+                // 固定模式下面板常驻：不因按键自动关闭，只保留 Esc
+                if PANEL_PINNED.load(Ordering::SeqCst) {
+                    if vk == 0x1B {
+                        let _ = tx.send(("esc".to_string(), shift));
+                        return true;
+                    }
+                    return false;
+                }
+
                 // 面板开着但用户显然在干别的：Esc 留给面板，其它键关掉面板并照常输入
                 match vk {
                     0x1B => {

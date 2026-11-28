@@ -102,6 +102,7 @@ Because the panel never takes focus, the keyboard is captured through a global l
 | Cursor is over the panel | Full shortcut set (↑↓ / Enter / Del / Ctrl+P / Ctrl+L / 1-9) |
 | Within 3 s of opening | Only Esc / ↑ / ↓ / Enter are captured, everything else passes through |
 | Panel open but you're working elsewhere | First non-Esc key closes the panel and is delivered to the original window |
+| **Pinned (`Ctrl+L`), cursor off the panel** | Only Esc is captured; everything else passes through and the panel stays |
 
 That way Enter in an Explorer search box, `Ctrl+P` in VS Code, or `Delete` in a file manager are never swallowed.
 
